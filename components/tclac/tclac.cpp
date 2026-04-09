@@ -47,6 +47,14 @@ void tclacClimate::setup() {
 	this->tx_led_pin_->setup();
 	this->tx_led_pin_->digital_write(false);
 #endif
+
+	// Wake-up sequence для пробуждения UART кондиционера
+	ESP_LOGD("TCL", "Sending wake-up sequence...");
+	for (int i = 0; i < 10; i++) {
+		this->esphome::uart::UARTDevice::write_array(poll, sizeof(poll));
+		delay(150);
+	}
+	ESP_LOGD("TCL", "Wake-up sequence completed");
 }
 
 void tclacClimate::loop()  {
