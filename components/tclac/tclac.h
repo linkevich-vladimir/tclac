@@ -1,133 +1,155 @@
 #pragma once
 
-#include "esphome/core/automation.h"
-#include "tclac.h"
+#include "esphome/core/component.h"
+#include "esphome/components/climate/climate.h"
+#include "esphome/components/uart/uart.h"
+#include "esphome/core/gpio.h"
+#include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace tclac {
 
-// Шаблон действия: изменение вертикальной фиксации заслонки
-template<typename... Ts> class VerticalAirflowAction : public Action<Ts...> {
- public:
-  VerticalAirflowAction(tclacClimate *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(AirflowVerticalDirection, direction)
-  void play(Ts... x) { this->parent_->set_vertical_airflow(this->direction_.value(x...)); }
-
- protected:
-  tclacClimate *parent_;
+enum VerticalSwingDirection : uint8_t {
+  UPDOWN = 0,
+  UPSIDE = 1,
+  DOWNSIDE = 2,
 };
 
-// Шаблон действия: изменение горизонтальной фиксации заслонок
-template<typename... Ts> class HorizontalAirflowAction : public Action<Ts...> {
- public:
-  HorizontalAirflowAction(tclacClimate *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(AirflowHorizontalDirection, direction)
-  void play(Ts... x) { this->parent_->set_horizontal_airflow(this->direction_.value(x...)); }
-
- protected:
-  tclacClimate *parent_;
+enum HorizontalSwingDirection : uint8_t {
+  LEFT_RIGHT = 0,
+  LEFTSIDE = 1,
+  CENTER = 2,
+  RIGHTSIDE = 3,
 };
 
-// Шаблон действия: изменение режима вертикального качания заслонки
-template<typename... Ts> class VerticalSwingDirectionAction : public Action<Ts...> {
- public:
-  VerticalSwingDirectionAction(tclacClimate *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(VerticalSwingDirection, direction)
-  void play(Ts... x) { this->parent_->set_vertical_swing_direction(this->direction_.value(x...)); }
-
- protected:
-  tclacClimate *parent_;
+enum AirflowVerticalDirection : uint8_t {
+  LAST = 0,
+  MAX_UP = 1,
+  UP = 2,
+  CENTER_VERTICAL = 3,
+  DOWN = 4,
+  MAX_DOWN = 5,
 };
 
-// Шаблон действия: изменение режима горизонтального качания заслонок
-template<typename... Ts> class HorizontalSwingDirectionAction : public Action<Ts...> {
- public:
-  HorizontalSwingDirectionAction(tclacClimate *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(HorizontalSwingDirection, direction)
-  void play(Ts... x) { this->parent_->set_horizontal_swing_direction(this->direction_.value(x...)); }
-
- protected:
-  tclacClimate *parent_;
+enum AirflowHorizontalDirection : uint8_t {
+  LAST_HORIZONTAL = 0,
+  MAX_LEFT = 1,
+  LEFT = 2,
+  CENTER_HORIZONTAL = 3,
+  RIGHT = 4,
+  MAX_RIGHT = 5,
 };
 
-// Шаблон действия: включение дисплея
-template<typename... Ts> class DisplayOnAction : public Action<Ts...> {
+class tclacClimate : public climate::Climate, public PollingComponent, public uart::UARTDevice {
  public:
-  DisplayOnAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_display_state(true); }
+  tclacClimate() = default;
+  explicit tclacClimate(uart::UARTComponent *parent) : uart::UARTDevice(parent) {}
+
+  climate::ClimateTraits traits() override;
+  void setup() override;
+  void loop() override;
+  void update() override;
+  void control(const climate::ClimateCall &call) override;
+
+  void set_beeper_state(bool state);
+  void set_display_state(bool state);
+  void set_force_mode_state(bool state);
+  void set_module_display_state(bool state);
+  void set_vertical_airflow(AirflowVerticalDirection direction);
+  void set_horizontal_airflow(AirflowHorizontalDirection direction);
+  void set_vertical_swing_direction(VerticalSwingDirection direction);
+  void set_horizontal_swing_direction(HorizontalSwingDirection direction);
+  void set_supported_modes(climate::ClimateModeMask modes);
+  void set_supported_fan_modes(climate::ClimateFanModeMask modes);
+  void set_supported_swing_modes(climate::ClimateSwingModeMask modes);
+  void set_supported_presets(climate::ClimatePresetMask presets);
+
+#ifdef CONF_RX_LED
+  void set_rx_led_pin(GPIOPin *rx_led_pin);
+#endif
+#ifdef CONF_TX_LED
+  void set_tx_led_pin(GPIOPin *tx_led_pin);
+#endif
 
  protected:
-  tclacClimate *parent_;
-};
+  static const uint8_t MODE_POS = 7;
+  static const uint8_t FAN_SPEED_POS = 10;
+  static const uint8_t FAN_QUIET_POS = 8;
+  static const uint8_t SWING_POS = 10;
 
-// Шаблон действия: выключение дисплея
-template<typename... Ts> class DisplayOffAction : public Action<Ts...> {
- public:
-  DisplayOffAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_display_state(false); }
+  static const uint8_t MODE_MASK = 0x0F;
+  static const uint8_t SET_TEMP_MASK = 0x0F;
+  static const uint8_t FAN_SPEED_MASK = 0x07;
+  static const uint8_t SWING_MODE_MASK = 0x38;
 
- protected:
-  tclacClimate *parent_;
-};
+  static const uint8_t MODE_AUTO = 0x08;
+  static const uint8_t MODE_COOL = 0x03;
+  static const uint8_t MODE_DRY = 0x02;
+  static const uint8_t MODE_FAN_ONLY = 0x07;
+  static const uint8_t MODE_HEAT = 0x01;
 
-// Шаблон действия: включение пищалки
-template<typename... Ts> class BeeperOnAction : public Action<Ts...> {
- public:
-  BeeperOnAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_beeper_state(true); }
+  static const uint8_t FAN_AUTO = 0x00;
+  static const uint8_t FAN_LOW = 0x01;
+  static const uint8_t FAN_MIDDLE = 0x06;
+  static const uint8_t FAN_MEDIUM = 0x03;
+  static const uint8_t FAN_HIGH = 0x07;
+  static const uint8_t FAN_FOCUS = 0x05;
+  static const uint8_t FAN_QUIET = 0x80;
+  static const uint8_t FAN_DIFFUSE = 0x40;
 
- protected:
-  tclacClimate *parent_;
-};
+  static const uint8_t SWING_OFF = 0x00;
+  static const uint8_t SWING_VERTICAL = 0x38;
+  static const uint8_t SWING_HORIZONTAL = 0x08;
+  static const uint8_t SWING_BOTH = 0x38;
 
-// Шаблон действия: выклюение пищалки
-template<typename... Ts> class BeeperOffAction : public Action<Ts...> {
- public:
-  BeeperOffAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_beeper_state(false); }
+  void readData();
+  void takeControl();
+  void sendData(uint8_t *message, uint8_t size);
+  String getHex(uint8_t *message, uint8_t size);
+  uint8_t getChecksum(const uint8_t *message, size_t size);
+  void dataShow(bool flow, bool shine);
 
- protected:
-  tclacClimate *parent_;
-};
+  bool initialized_{false};
+  bool allow_take_control{false};
+  bool is_call_control{false};
+  uint32_t last_control_time_{0};
 
-// Шаблон действия: включение индикатора модуля
-template<typename... Ts> class ModuleDisplayOnAction : public Action<Ts...> {
- public:
-  ModuleDisplayOnAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_module_display_state(true); }
+  bool beeper_status_{true};
+  bool display_status_{true};
+  bool force_mode_status_{true};
+  bool module_display_status_{true};
 
- protected:
-  tclacClimate *parent_;
-};
+  VerticalSwingDirection vertical_swing_direction_{VerticalSwingDirection::UPDOWN};
+  HorizontalSwingDirection horizontal_swing_direction_{HorizontalSwingDirection::LEFT_RIGHT};
+  AirflowVerticalDirection vertical_direction_{AirflowVerticalDirection::CENTER_VERTICAL};
+  AirflowHorizontalDirection horizontal_direction_{AirflowHorizontalDirection::CENTER_HORIZONTAL};
 
-// Шаблон действия: выключение индикатора модуля
-template<typename... Ts> class ModuleDisplayOffAction : public Action<Ts...> {
- public:
-  ModuleDisplayOffAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_module_display_state(false); }
+  climate::ClimateMode switch_climate_mode{climate::CLIMATE_MODE_OFF};
+  climate::ClimatePreset switch_preset{climate::CLIMATE_PRESET_NONE};
+  climate::ClimateFanMode switch_fan_mode{climate::CLIMATE_FAN_AUTO};
+  climate::ClimateSwingMode switch_swing_mode{climate::CLIMATE_SWING_OFF};
 
- protected:
-  tclacClimate *parent_;
-};
+  climate::ClimateModeMask supported_modes_{};
+  climate::ClimateFanModeMask supported_fan_modes_{};
+  climate::ClimateSwingModeMask supported_swing_modes_{};
+  climate::ClimatePresetMask supported_presets_{};
 
-// Шаблон действия: включение принудительного применения настроек
-template<typename... Ts> class ForceOnAction : public Action<Ts...> {
- public:
-  ForceOnAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_force_mode_state(true); }
+  uint8_t target_temperature_set{15};
 
- protected:
-  tclacClimate *parent_;
-};
+  uint8_t dataRX[61]{};
+  uint8_t dataTX[38]{};
 
-// Шаблон действия: выключение принудительного применения настроек
-template<typename... Ts> class ForceOffAction : public Action<Ts...> {
- public:
-  ForceOffAction(tclacClimate *parent) : parent_(parent) {}
-  void play(Ts... x) { this->parent_->set_force_mode_state(false); }
+  const uint8_t poll[30] = {
+      0xBB, 0x00, 0x01, 0x04, 0x19, 0x03, 0x01, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA6};
 
- protected:
-  tclacClimate *parent_;
+#ifdef CONF_RX_LED
+  GPIOPin *rx_led_pin_{nullptr};
+#endif
+#ifdef CONF_TX_LED
+  GPIOPin *tx_led_pin_{nullptr};
+#endif
 };
 
 }  // namespace tclac
