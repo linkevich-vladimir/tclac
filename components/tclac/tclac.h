@@ -1,9 +1,9 @@
 /**
-* Create by Miguel Ángel López on 20/07/19
-* and modify by xaxexa
-* Refactoring & component making:
-* Соловей с паяльником 15.03.2024
-**/
+ * Create by Miguel Ángel López on 20/07/19
+ * and modify by xaxexa
+ * Refactoring & component making:
+ * Соловей с паяльником 15.03.2024
+ **/
 
 #ifndef TCL_ESP_TCL_H
 #define TCL_ESP_TCL_H
@@ -104,6 +104,7 @@ class tclacClimate : public climate::Climate, public esphome::uart::UARTDevice, 
 		int target_temperature_set = 0;
 		uint8_t switch_climate_mode = 0;
 		bool allow_take_control = false;
+		bool first_sync_done_ = false;  // FIX: Added synchronization flag
 		
 		esphome::climate::ClimateTraits traits_;
 		
@@ -111,6 +112,14 @@ class tclacClimate : public climate::Climate, public esphome::uart::UARTDevice, 
 
 		tclacClimate() : PollingComponent(5 * 1000) {
 			checksum = 0;
+			// FIX: Initialize buffers properly to prevent uninitialized memory issues
+			memset(dataTX, 0, sizeof(dataTX));
+			memset(dataRX, 0, sizeof(dataRX));
+			beeper_status_ = true;
+			display_status_ = true;
+			force_mode_status_ = true;
+			module_display_status_ = true;
+			first_sync_done_ = false;
 		}
 
 		void readData();
