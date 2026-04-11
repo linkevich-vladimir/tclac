@@ -1,23 +1,26 @@
 # packages/core.yaml
-# Этот файл подключает компонент tclac из репозитория GitHub и настраивает базовые параметры
-
-# Подключаем компонент напрямую из этого же репозитория
-external_components:
-  - source:
-      type: github
-      repo: linkevich-vladimir/tclac
-      ref: master
-      files: [tclac]
-    components: [tclac]
-    refresh: 30s
+# Этот файл подключает компонент tclac из репозитория и настраивает базовые параметры
 
 esphome:
   on_boot:
     priority: 600
     then:
       - lambda: |-
-          // Инициализация при старте, если нужно
-          // id(tclac_component)->takeControl();
+          id(tclac_component)->takeControl();
+
+external_components:
+  - source:
+      type: github
+      repo: linkevich-vladimir/tclac
+      ref: master
+      # Путь внутри репозитория, где лежит папка components
+      # Обычно это корень, если папка components лежит прямо в репозитории
+      # Если у вас структура такая: репозиторий/components/tclac, то files не нужен или путь выше
+      # Для структуры: репозиторий/components/tclac -> используем path или files
+      # Правильный вариант для ESPHome, когда компоненты в папке components в корне репо:
+      path: components 
+    components: [tclac]
+    refresh: 30s
 
 logger:
   level: DEBUG
@@ -39,7 +42,6 @@ uart:
   parity: EVEN
   stop_bits: 1
   data_bits: 8
-  # Отладка UART поможет видеть сырые данные, если будут проблемы
   debug:
     direction: BOTH
     dummy_receiver: false
@@ -78,13 +80,10 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
       - lambda: |-
-          if (id(tclac_component).has_state()) {
-             // Здесь должна быть логика отправки команды, если она реализована в компоненте
-             ESP_LOGD("switch", "Beeper toggle requested");
-          }
+          id(tclac_component)->set_beeper(true);
     turn_off_action:
       - lambda: |-
-          ESP_LOGD("switch", "Beeper off requested");
+          id(tclac_component)->set_beeper(false);
 
   - platform: template
     id: display_switch
@@ -93,10 +92,10 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
       - lambda: |-
-          ESP_LOGD("switch", "Display on requested");
+          id(tclac_component)->set_display(true);
     turn_off_action:
       - lambda: |-
-          ESP_LOGD("switch", "Display off requested");
+          id(tclac_component)->set_display(false);
 
 select:
   - platform: template
@@ -111,7 +110,7 @@ select:
     initial_option: "Swing"
     set_action:
       - lambda: |-
-          ESP_LOGD("select", "Vertical swing set to %s", x.c_str());
+          id(tclac_component)->set_vertical_swing(x);
 
   - platform: template
     id: horizontal_swing
@@ -125,7 +124,7 @@ select:
     initial_option: "Swing"
     set_action:
       - lambda: |-
-          ESP_LOGD("select", "Horizontal swing set to %s", x.c_str());
+          id(tclac_component)->set_horizontal_swing(x);
 
 sensor:
   - platform: internal
