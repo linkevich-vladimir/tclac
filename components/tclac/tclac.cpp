@@ -6,6 +6,7 @@
 **/
 #include "esphome.h"
 #include "esphome/core/defines.h"
+#include "esphome/core/helpers.h"
 #include "tclac.h"
 
 namespace esphome{
@@ -50,6 +51,14 @@ void tclacClimate::setup() {
 }
 
 void tclacClimate::loop()  {
+	// Проверяем таймаут ожидания ответа от кондиционера (2 секунды)
+	if (waiting_for_response && (millis() - last_command_time > 2000)) {
+		ESP_LOGW("TCL", "Timeout waiting for response, resetting flag");
+		waiting_for_response = false;
+		// Разрешаем управление после таймаута
+		allow_take_control = true;
+	}
+	
 	// Если в буфере UART что-то есть, то читаем это что-то
 	if (esphome::uart::UARTDevice::available() > 0) {
 		dataShow(0, true);
@@ -61,47 +70,82 @@ void tclacClimate::loop()  {
 			return;
 		}
 		// А вот если совпал заголовок (0xBB), то начинаем чтение по цепочке еще 4 байт
-		delay(5);
-		dataRX[1] = esphome::uart::UARTDevice::read();
-		delay(5);
-		dataRX[2] = esphome::uart::UARTDevice::read();
-		delay(5);
-		dataRX[3] = esphome::uart::UARTDevice::read();
-		delay(5);
-		dataRX[4] = esphome::uart::UARTDevice::read();
+		// Используем неблокирующее ожидание с проверкой доступности данных
+		uint32_t start_time = millis();
+		for (int i = 1; i < 5; i++) {
+			while (esphome::uart::UARTDevice::available() == 0) {
+				if (millis() - start_time > 50) { // Таймаут 50мс вместо блокирующего delay
+					ESP_LOGD("TCL", "Timeout reading header");
+					dataShow(0, 0);
+					return;
+				}
+				esphome::yield_now(); // Важно для предотвращения срабатывания watchdog
+			}
+			dataRX[i] = esphome::uart::UARTDevice::read();
+		}
 
-		//auto raw = getHex(dataRX, 5);
+		auto raw = getHex(dataRX, 5);
 		
-		//ESP_LOGD("TCL", "first 5 byte : %s ", raw.c_str());
+		ESP_LOGD("TCL", "First 5 bytes: %s", raw.c_str());
 
 		// Из первых 5 байт нам нужен пятый- он содержит длину сообщения
-		esphome::uart::UARTDevice::read_array(dataRX+5, dataRX[4]+1);
-
-		byte check = getChecksum(dataRX, sizeof(dataRX));
-
-		//raw = getHex(dataRX, sizeof(dataRX));
+		// Проверяем, что длина корректна перед чтением
+		if (dataRX[4] + 5 + 1 > 61) {
+			ESP_LOGW("TCL", "Invalid message length: %d", dataRX[4]);
+			dataShow(0, 0);
+			return;
+		}
 		
-		//ESP_LOGD("TCL", "RX full : %s ", raw.c_str());
+		// Читаем оставшиеся данные с проверкой таймаута
+		start_time = millis();
+		for (int i = 5; i < dataRX[4] + 6; i++) {
+			while (esphome::uart::UARTDevice::available() == 0) {
+				if (millis() - start_time > 100) { // Таймаут 100мс
+					ESP_LOGD("TCL", "Timeout reading message body");
+					dataShow(0, 0);
+					return;
+				}
+				esphome::yield_now(); // Важно для предотвращения срабатывания watchdog
+			}
+			dataRX[i] = esphome::uart::UARTDevice::read();
+		}
+
+		byte check = getChecksum(dataRX, dataRX[4] + 5 + 1);  // Используем реальную длину сообщения
+
+		raw = getHex(dataRX, dataRX[4] + 6);
+		
+		ESP_LOGD("TCL", "RX full (%d bytes): %s", dataRX[4] + 6, raw.c_str());
 		
 		// Проверяем контрольную сумму
-		if (check != dataRX[60]) {
-			ESP_LOGD("TCL", "Invalid checksum %x", check);
+		if (check != dataRX[dataRX[4] + 5]) {
+			ESP_LOGW("TCL", "Invalid checksum: expected %x, got %x", check, dataRX[dataRX[4] + 5]);
 			tclacClimate::dataShow(0,0);
 			return;
 		} else {
-			//ESP_LOGD("TCL", "checksum OK %x", check);
+			ESP_LOGD("TCL", "Checksum OK: %x", check);
 		}
 		tclacClimate::dataShow(0,0);
 		// Прочитав все из буфера приступаем к разбору данных
 		tclacClimate::readData();
+		// Сбрасываем флаг ожидания ответа после успешного чтения
+		waiting_for_response = false;
+		// Разрешаем управление после успешного получения данных
+		allow_take_control = true;
 	}
 }
 
 void tclacClimate::update() {
+	// Не запрашиваем данные, если ждем ответа на предыдущую команду
+	if (waiting_for_response) {
+		ESP_LOGD("TCL", "Waiting for response, skipping poll");
+		return;
+	}
 	tclacClimate::dataShow(1,1);
 	this->esphome::uart::UARTDevice::write_array(poll, sizeof(poll));
 	//auto raw = tclacClimate::getHex(poll, sizeof(poll));
 	//ESP_LOGD("TCL", "chek status sended");
+	waiting_for_response = true;
+	last_command_time = millis();
 	tclacClimate::dataShow(1,0);
 }
 
@@ -202,11 +246,25 @@ void tclacClimate::readData() {
 	}
 	// Публикуем данные
 	this->publish_state();
-	allow_take_control = true;
+	// allow_take_control устанавливается в true в loop() после успешного чтения
+	// Сбрасываем флаг ожидания, так как успешно получили данные
+	waiting_for_response = false;
    }
 
 // Climate control
 void tclacClimate::control(const ClimateCall &call) {
+	// Проверяем, разрешено ли управление (получили ли мы хотя бы один ответ от кондиционера)
+	if (!allow_take_control) {
+		ESP_LOGW("TCL", "Control not allowed yet - waiting for first successful read from AC");
+		return;
+	}
+	
+	// Проверяем, не ждем ли мы уже ответа на предыдущую команду
+	if (waiting_for_response) {
+		ESP_LOGW("TCL", "Already waiting for response, skipping control command");
+		return;
+	}
+	
 	// Запрашиваем данные из переключателя режимов работы кондиционера
 	if (call.get_mode().has_value()){
 		switch_climate_mode = call.get_mode().value();
@@ -247,11 +305,13 @@ void tclacClimate::control(const ClimateCall &call) {
 	
 	is_call_control = true;
 	takeControl();
-	allow_take_control = true;
 }
-	
-	
+
 void tclacClimate::takeControl() {
+	// Полная инициализация массива dataTX перед использованием
+	for (int i = 0; i < 38; i++) {
+		dataTX[i] = 0;
+	}
 	
 	dataTX[7]  = 0b00000000;
 	dataTX[8]  = 0b00000000;
@@ -559,8 +619,12 @@ void tclacClimate::takeControl() {
 	dataTX[37] = tclacClimate::getChecksum(dataTX, sizeof(dataTX));
 
 	tclacClimate::sendData(dataTX, sizeof(dataTX));
-	allow_take_control = false;
+	// Устанавливаем флаг ожидания ответа после отправки команды
+	waiting_for_response = true;
+	last_command_time = millis();
+	// Не сбрасываем allow_take_control - он будет сброшен только при таймауте
 	is_call_control = false;
+	ESP_LOGD("TCL", "Command sent, waiting for response");
 }
 
 // Отправка данных в кондиционер
@@ -568,16 +632,18 @@ void tclacClimate::sendData(byte * message, byte size) {
 	tclacClimate::dataShow(1,1);
 	//Serial.write(message, size);
 	this->esphome::uart::UARTDevice::write_array(message, size);
-	//auto raw = getHex(message, size);
-	ESP_LOGD("TCL", "Message to TCL sended...");
+	auto raw = getHex(message, size);
+	ESP_LOGD("TCL", "Message to TCL sended: %s", raw.c_str());
 	tclacClimate::dataShow(1,0);
 }
 
 // Преобразование байта в читабельный формат
 String tclacClimate::getHex(byte *message, byte size) {
-	String raw;
+	String raw = "";
 	for (int i = 0; i < size; i++) {
-		raw += "\n" + String(message[i]);
+		if (message[i] < 0x10) raw += "0";
+		raw += String(message[i], HEX);
+		if (i < size - 1) raw += " ";
 	}
 	raw.toUpperCase();
 	return raw;

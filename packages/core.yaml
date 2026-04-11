@@ -118,12 +118,20 @@ captive_portal:
 
 
 # # # # # # # # # # # # # # # # # # # # # # #
-# # # # #     НЕ РЕДАКТИРОВАТЬ!     # # # # #
+# # # # #     НЕ РЕДАКТИРОВАТЬ! (кроме уровня логгирования)     # # # # #
 # # # # # # # # # # # # # # # # # # # # # # #
 
 # ОБЯЗАТЕЛЬНО отключаем логгирование через UART
 logger:
   baud_rate: 0
+  level: DEBUG
+  logs:
+    uart: DEBUG
+    tclac: DEBUG
+    climate: DEBUG
+    sensor: DEBUG
+    switch: DEBUG
+    select: DEBUG
 
 # Раздел настроек устройства:
 # - Переключатели

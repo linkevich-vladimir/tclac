@@ -104,6 +104,8 @@ class tclacClimate : public climate::Climate, public esphome::uart::UARTDevice, 
 		int target_temperature_set = 0;
 		uint8_t switch_climate_mode = 0;
 		bool allow_take_control = false;
+		bool waiting_for_response = false;
+		uint32_t last_command_time = 0;
 		
 		esphome::climate::ClimateTraits traits_;
 		
@@ -111,6 +113,19 @@ class tclacClimate : public climate::Climate, public esphome::uart::UARTDevice, 
 
 		tclacClimate() : PollingComponent(5 * 1000) {
 			checksum = 0;
+			// Инициализация массивов нулями
+			for (int i = 0; i < 38; i++) {
+				dataTX[i] = 0;
+			}
+			for (int i = 0; i < 61; i++) {
+				dataRX[i] = 0;
+			}
+			// Сброс флага управления до первого успешного чтения
+			allow_take_control = false;
+			is_call_control = false;
+			// Флаг ожидания ответа от кондиционера после отправки команды
+			waiting_for_response = false;
+			last_command_time = 0;
 		}
 
 		void readData();
