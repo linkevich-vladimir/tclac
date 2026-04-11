@@ -1,7 +1,7 @@
 #pragma once
 
-#include "esphome/core/automation.h"
 #include "tclac.h"
+#include "esphome/core/automation.h"
 
 namespace esphome {
 namespace tclac {
