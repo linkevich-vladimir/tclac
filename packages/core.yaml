@@ -1,17 +1,5 @@
 # packages/core.yaml
 
-# Подключаем компонент tclac прямо из этого репозитория
-external_components:
-  - source:
-      type: github
-      repo: linkevich-vladimir/tclac
-      ref: master
-      # Путь внутри репозитория, где лежит папка с компонентами
-      path: components
-    components:
-      - tclac
-    refresh: 30s
-
 logger:
   level: DEBUG
   logs:
@@ -23,7 +11,6 @@ logger:
     select: DEBUG
     wifi: WARN
     api: WARN
-    esp32.preferences: WARN
 
 uart:
   id: uart_bus
@@ -33,12 +20,20 @@ uart:
   parity: EVEN
   stop_bits: 1
   data_bits: 8
-  # Отладка UART (можно включить для детального просмотра байт)
+  # Отладка UART поможет увидеть сырые данные, если будут проблемы
   debug:
     direction: BOTH
     dummy_receiver: false
     after:
       timeout: 50ms
+
+external_components:
+  - source:
+      type: github
+      repo: linkevich-vladimir/tclac
+      ref: master
+    components: [tclac]
+    refresh: 30s
 
 climate:
   - platform: tclac
@@ -63,58 +58,28 @@ climate:
       - "Medium-High"
       - "High"
 
-# Дополнительные переключатели (опционально)
-switch:
-  - platform: template
-    id: beeper_switch
-    name: "Beeper"
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-    # Действия будут добавлены, когда методы появятся в C++ классе
-    turn_on_action:
-      - lambda: |-
-          ESP_LOGD("main", "Beeper ON requested");
-    turn_off_action:
-      - lambda: |-
-          ESP_LOGD("main", "Beeper OFF requested");
+# Пример дополнительных переключателей (раскомментируйте при необходимости)
+# switch:
+#   - platform: template
+#     id: beeper_switch
+#     name: "Beeper"
+#     optimistic: true
+#     restore_mode: RESTORE_DEFAULT_ON
+#     turn_on_action:
+#       - lambda: |-
+#           id(tclac_component)->set_beeper(true);
+#     turn_off_action:
+#       - lambda: |-
+#           id(tclac_component)->set_beeper(false);
 
-  - platform: template
-    id: display_switch
-    name: "Display"
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-    turn_on_action:
-      - lambda: |-
-          ESP_LOGD("main", "Display ON requested");
-    turn_off_action:
-      - lambda: |-
-          ESP_LOGD("main", "Display OFF requested");
-
-select:
-  - platform: template
-    id: vertical_swing
-    name: "Vertical swing"
-    options:
-      - "Off"
-      - "Manual"
-      - "Swing"
-    optimistic: true
-    restore_value: true
-    initial_option: "Swing"
-    set_action:
-      - lambda: |-
-          ESP_LOGD("main", "Vertical swing set to %s", x.c_str());
-
-  - platform: template
-    id: horizontal_swing
-    name: "Horizontal swing"
-    options:
-      - "Off"
-      - "Manual"
-      - "Swing"
-    optimistic: true
-    restore_value: true
-    initial_option: "Swing"
-    set_action:
-      - lambda: |-
-          ESP_LOGD("main", "Horizontal swing set to %s", x.c_str());
+# select:
+#   - platform: template
+#     id: vertical_swing
+#     name: "Vertical swing"
+#     options: ["Off", "Manual", "Swing"]
+#     optimistic: true
+#     restore_value: true
+#     initial_option: "Swing"
+#     set_action:
+#       - lambda: |-
+#           id(tclac_component)->set_vertical_swing(x);
