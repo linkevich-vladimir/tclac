@@ -1,11 +1,11 @@
 substitutions:
   device_name: tclac
-  humanly_name: TCL Air Conditioner
-  wifi_ssid: !secret wifi_ssid
-  wifi_password: !secret wifi_password
+  humanly_name: TCL Air Conditioner Badroom
+  wifi_ssid: "TPLink62"
+  wifi_password: "69096860"
   recovery_pass: mKSzmBdt7DAj
   ota_pass: 90cf525a594c8bb2cbf917bc2c2fa058
-  api_key: lmUoWsWs1oqSfJqLFsA6PisHSx4Y1G+iu7V3PDIqpXk=
+  api_key: cSFfEIavDEIL7kpZGg24Emr2guifgYPv2HlGN4V4AsM=
   uart_rx: GPIO3
   uart_tx: GPIO1
   receive_led: GPIO2
@@ -13,12 +13,13 @@ substitutions:
 
 packages:
   remote_package:
-    url: https://github.com/I-am-nightingale/tclac.git
+    url: https://github.com/linkevich-vladimir/tclac.git
     ref: master
     files:
       - packages/core.yaml
     refresh: 30s
-    
-esphome:
-  platform: ESP32
+
+esp32:
   board: nodemcu-32s
+  framework:
+    type: arduino
