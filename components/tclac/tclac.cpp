@@ -4,9 +4,9 @@
 * Refactoring & component making:
 * Соловей с паяльником 15.03.2024
 **/
+#include "tclac.h"
 #include "esphome.h"
 #include "esphome/core/defines.h"
-#include "tclac.h"
 
 namespace esphome{
 namespace tclac{
