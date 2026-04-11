@@ -15,7 +15,7 @@ static constexpr size_t TCLAC_RX_PACKET_SIZE = 61;
 static constexpr size_t TCLAC_RX_HEADER_SIZE = 5;
 static constexpr uint32_t TCLAC_CONTROL_RATE_LIMIT_MS = 500;
 
-ClimateTraits tclacClimate::traits() {
+climate::ClimateTraits tclacClimate::traits() {
         auto traits = climate::ClimateTraits();
 
         //traits.set_supports_action(false);
@@ -33,7 +33,7 @@ ClimateTraits tclacClimate::traits() {
         traits.add_supported_mode(climate::CLIMATE_MODE_AUTO);
         traits.add_supported_fan_mode(climate::CLIMATE_FAN_AUTO);
         traits.add_supported_swing_mode(climate::CLIMATE_SWING_OFF);
-        traits.add_supported_preset(ClimatePreset::CLIMATE_PRESET_NONE);
+        traits.add_supported_preset(climate::CLIMATE_PRESET_NONE);
 
         return traits;
 }
@@ -222,19 +222,19 @@ void tclacClimate::readData() {
                                 break;
                 }
 
-                preset = ClimatePreset::CLIMATE_PRESET_NONE;
+                preset = climate::CLIMATE_PRESET_NONE;
                 if (dataRX[7] & (1 << 6)) {
-                        preset = ClimatePreset::CLIMATE_PRESET_ECO;
+                        preset = climate::CLIMATE_PRESET_ECO;
                 } else if (dataRX[9] & (1 << 2)) {
-                        preset = ClimatePreset::CLIMATE_PRESET_COMFORT;
+                        preset = climate::CLIMATE_PRESET_COMFORT;
                 } else if (dataRX[19] & (1 << 0)) {
-                        preset = ClimatePreset::CLIMATE_PRESET_SLEEP;
+                        preset = climate::CLIMATE_PRESET_SLEEP;
                 }
         } else {
                 mode = climate::CLIMATE_MODE_OFF;
                 fan_mode = climate::CLIMATE_FAN_AUTO;
                 swing_mode = climate::CLIMATE_SWING_OFF;
-                preset = ClimatePreset::CLIMATE_PRESET_NONE;
+                preset = climate::CLIMATE_PRESET_NONE;
         }
 
         this->publish_state();
@@ -247,7 +247,7 @@ void tclacClimate::readData() {
 }
 
 // Climate control
-void tclacClimate::control(const ClimateCall &call) {
+void tclacClimate::control(const climate::ClimateCall &call) {
         if (!initialized_) {
                 ESP_LOGW("TCL", "Ignoring control command - AC not initialized yet");
                 return;
@@ -273,7 +273,7 @@ void tclacClimate::control(const ClimateCall &call) {
         } else if (preset.has_value()) {
                 switch_preset = preset.value();
         } else {
-                switch_preset = ClimatePreset::CLIMATE_PRESET_NONE;
+                switch_preset = climate::CLIMATE_PRESET_NONE;
         }
 
         if (call.get_fan_mode().has_value()) {
@@ -314,7 +314,7 @@ void tclacClimate::takeControl() {
         if (is_call_control != true) {
                 ESP_LOGD("TCL", "Get MODE from AC for force config");
                 switch_climate_mode = mode;
-                switch_preset = preset.has_value() ? preset.value() : ClimatePreset::CLIMATE_PRESET_NONE;
+                switch_preset = preset.has_value() ? preset.value() : climate::CLIMATE_PRESET_NONE;
                 switch_fan_mode = fan_mode.has_value() ? fan_mode.value() : climate::CLIMATE_FAN_AUTO;
                 switch_swing_mode = swing_mode;
                 target_temperature_set = 31 - static_cast<int>(target_temperature);
@@ -418,15 +418,15 @@ void tclacClimate::takeControl() {
         }
 
         switch (switch_preset) {
-                case ClimatePreset::CLIMATE_PRESET_NONE:
+                case climate::CLIMATE_PRESET_NONE:
                         break;
-                case ClimatePreset::CLIMATE_PRESET_ECO:
+                case climate::CLIMATE_PRESET_ECO:
                         dataTX[7] += 0b10000000;
                         break;
-                case ClimatePreset::CLIMATE_PRESET_SLEEP:
+                case climate::CLIMATE_PRESET_SLEEP:
                         dataTX[19] += 0b00000001;
                         break;
-                case ClimatePreset::CLIMATE_PRESET_COMFORT:
+                case climate::CLIMATE_PRESET_COMFORT:
                         dataTX[8] += 0b00010000;
                         break;
         }
