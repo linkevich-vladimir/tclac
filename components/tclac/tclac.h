@@ -1,41 +1,44 @@
 #pragma once
 
-#include "esphome/core/component.h"
+#include <cstddef>
+#include <cstdint>
+
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/uart/uart.h"
+#include "esphome/core/component.h"
 #include "esphome/core/gpio.h"
 #include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace tclac {
 
-enum VerticalSwingDirection : uint8_t {
-  UPDOWN = 0,
+enum class VerticalSwingDirection : uint8_t {
+  UP_DOWN = 0,
   UPSIDE = 1,
   DOWNSIDE = 2,
 };
 
-enum HorizontalSwingDirection : uint8_t {
+enum class HorizontalSwingDirection : uint8_t {
   LEFT_RIGHT = 0,
   LEFTSIDE = 1,
   CENTER = 2,
   RIGHTSIDE = 3,
 };
 
-enum AirflowVerticalDirection : uint8_t {
+enum class AirflowVerticalDirection : uint8_t {
   LAST = 0,
   MAX_UP = 1,
   UP = 2,
-  CENTER_VERTICAL = 3,
+  CENTER = 3,
   DOWN = 4,
   MAX_DOWN = 5,
 };
 
-enum AirflowHorizontalDirection : uint8_t {
-  LAST_HORIZONTAL = 0,
+enum class AirflowHorizontalDirection : uint8_t {
+  LAST = 0,
   MAX_LEFT = 1,
   LEFT = 2,
-  CENTER_HORIZONTAL = 3,
+  CENTER = 3,
   RIGHT = 4,
   MAX_RIGHT = 5,
 };
@@ -80,7 +83,8 @@ class tclacClimate : public climate::Climate, public PollingComponent, public ua
   static const uint8_t MODE_MASK = 0x0F;
   static const uint8_t SET_TEMP_MASK = 0x0F;
   static const uint8_t FAN_SPEED_MASK = 0x07;
-  static const uint8_t SWING_MODE_MASK = 0x38;
+  static const uint8_t SWING_VERTICAL_MASK = 0x38;
+  static const uint8_t SWING_HORIZONTAL_MASK = 0x08;
 
   static const uint8_t MODE_AUTO = 0x08;
   static const uint8_t MODE_COOL = 0x03;
@@ -100,7 +104,6 @@ class tclacClimate : public climate::Climate, public PollingComponent, public ua
   static const uint8_t SWING_OFF = 0x00;
   static const uint8_t SWING_VERTICAL = 0x38;
   static const uint8_t SWING_HORIZONTAL = 0x08;
-  static const uint8_t SWING_BOTH = 0x38;
 
   void readData();
   void takeControl();
@@ -119,10 +122,10 @@ class tclacClimate : public climate::Climate, public PollingComponent, public ua
   bool force_mode_status_{true};
   bool module_display_status_{true};
 
-  VerticalSwingDirection vertical_swing_direction_{VerticalSwingDirection::UPDOWN};
+  VerticalSwingDirection vertical_swing_direction_{VerticalSwingDirection::UP_DOWN};
   HorizontalSwingDirection horizontal_swing_direction_{HorizontalSwingDirection::LEFT_RIGHT};
-  AirflowVerticalDirection vertical_direction_{AirflowVerticalDirection::CENTER_VERTICAL};
-  AirflowHorizontalDirection horizontal_direction_{AirflowHorizontalDirection::CENTER_HORIZONTAL};
+  AirflowVerticalDirection vertical_direction_{AirflowVerticalDirection::CENTER};
+  AirflowHorizontalDirection horizontal_direction_{AirflowHorizontalDirection::CENTER};
 
   climate::ClimateMode switch_climate_mode{climate::CLIMATE_MODE_OFF};
   climate::ClimatePreset switch_preset{climate::CLIMATE_PRESET_NONE};
