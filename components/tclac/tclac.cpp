@@ -327,14 +327,10 @@ void tclacClimate::takeControl() {
 
         if (is_call_control != true) {
                 ESP_LOGD("TCL", "Get MODE from AC for force config");
-                if (mode.has_value()) {
-                        switch_climate_mode = mode.value();
-                } else {
-                        switch_climate_mode = climate::CLIMATE_MODE_OFF;
-                }
+                switch_climate_mode = mode;
                 switch_preset = preset.has_value() ? preset.value() : climate::CLIMATE_PRESET_NONE;
                 switch_fan_mode = fan_mode.has_value() ? fan_mode.value() : climate::CLIMATE_FAN_AUTO;
-                switch_swing_mode = swing_mode.has_value() ? swing_mode.value() : climate::CLIMATE_SWING_OFF;
+                switch_swing_mode = swing_mode;
                 target_temperature_set = 31 - static_cast<int>(target_temperature);
         }
 
