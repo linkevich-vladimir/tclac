@@ -105,6 +105,8 @@ class tclacClimate : public climate::Climate, public PollingComponent, public ua
   static const uint8_t SWING_VERTICAL = 0x38;
   static const uint8_t SWING_HORIZONTAL = 0x08;
 
+  static const uint32_t INIT_TIMEOUT_MS = 10000;
+
   void readData();
   void takeControl();
   void sendData(uint8_t *message, uint8_t size);
@@ -116,6 +118,7 @@ class tclacClimate : public climate::Climate, public PollingComponent, public ua
   bool allow_take_control{false};
   bool is_call_control{false};
   uint32_t last_control_time_{0};
+  uint32_t setup_time_{0};
 
   bool beeper_status_{true};
   bool display_status_{true};
