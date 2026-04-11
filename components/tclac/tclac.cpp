@@ -1,9 +1,9 @@
 /**
-* Create by Miguel Ángel López on 20/07/19
-* and modify by xaxexa
-* Refactoring & component making:
-* Соловей с паяльником 15.03.2024
-**/
+ * Create by Miguel Ángel López on 20/07/19
+ * and modify by xaxexa
+ * Refactoring & component making:
+ * Соловей с паяльником 15.03.2024
+ **/
 #include "esphome.h"
 #include "esphome/core/defines.h"
 #include "tclac.h"
@@ -20,7 +20,7 @@ ClimateTraits tclacClimate::traits() {
 	//traits.set_supports_current_temperature(true);
 	//traits.set_supports_two_point_target_temperature(false);
 
-	traits.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE); // Предудущие методы запрещены, теперь нужно использовать add_feature_flags
+	traits.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE); // Предудущие методы запрещены, теперь нужно использовать add_feature_flag[...]
 
 	traits.set_supported_modes(this->supported_modes_);
 	traits.set_supported_presets(this->supported_presets_);
@@ -50,59 +50,43 @@ void tclacClimate::setup() {
 }
 
 void tclacClimate::loop()  {
-	// Если в буфере UART что-то есть, то читаем это что-то
-	if (esphome::uart::UARTDevice::available() > 0) {
+	// FIX: Non-blocking UART communication without delay() calls
+	// This prevents ESP watchdog resets during AC communication
+	
+	if (esphome::uart::UARTDevice::available() >= 61) {
 		dataShow(0, true);
-		dataRX[0] = esphome::uart::UARTDevice::read();
-		// Если принятый байт- не заголовок (0xBB), то просто покидаем цикл
+		
+		// Read entire message at once without blocking delays
+		esphome::uart::UARTDevice::read_array(dataRX, 61);
+		
+		// Check header
 		if (dataRX[0] != 0xBB) {
-			ESP_LOGD("TCL", "Wrong byte");
-			dataShow(0,0);
+			ESP_LOGD("TCL", "Wrong header byte: 0x%02X", dataRX[0]);
+			dataShow(0, 0);
 			return;
 		}
-		// А вот если совпал заголовок (0xBB), то начинаем чтение по цепочке еще 4 байт
-		delay(5);
-		dataRX[1] = esphome::uart::UARTDevice::read();
-		delay(5);
-		dataRX[2] = esphome::uart::UARTDevice::read();
-		delay(5);
-		dataRX[3] = esphome::uart::UARTDevice::read();
-		delay(5);
-		dataRX[4] = esphome::uart::UARTDevice::read();
 
-		//auto raw = getHex(dataRX, 5);
-		
-		//ESP_LOGD("TCL", "first 5 byte : %s ", raw.c_str());
-
-		// Из первых 5 байт нам нужен пятый- он содержит длину сообщения
-		esphome::uart::UARTDevice::read_array(dataRX+5, dataRX[4]+1);
-
+		// Verify checksum
 		byte check = getChecksum(dataRX, sizeof(dataRX));
-
-		//raw = getHex(dataRX, sizeof(dataRX));
 		
-		//ESP_LOGD("TCL", "RX full : %s ", raw.c_str());
-		
-		// Проверяем контрольную сумму
 		if (check != dataRX[60]) {
-			ESP_LOGD("TCL", "Invalid checksum %x", check);
-			tclacClimate::dataShow(0,0);
+			ESP_LOGD("TCL", "Invalid checksum: calculated=0x%02X, received=0x%02X", check, dataRX[60]);
+			dataShow(0, 0);
 			return;
-		} else {
-			//ESP_LOGD("TCL", "checksum OK %x", check);
 		}
-		tclacClimate::dataShow(0,0);
-		// Прочитав все из буфера приступаем к разбору данных
+		
+		dataShow(0, 0);
+		// Process received data
 		tclacClimate::readData();
 	}
 }
 
 void tclacClimate::update() {
-	tclacClimate::dataShow(1,1);
+	tclacClimate::dataShow(1, 1);
 	this->esphome::uart::UARTDevice::write_array(poll, sizeof(poll));
 	//auto raw = tclacClimate::getHex(poll, sizeof(poll));
 	//ESP_LOGD("TCL", "chek status sended");
-	tclacClimate::dataShow(1,0);
+	tclacClimate::dataShow(1, 0);
 }
 
 void tclacClimate::readData() {
@@ -110,7 +94,7 @@ void tclacClimate::readData() {
 	current_temperature = float((( (dataRX[17] << 8) | dataRX[18] ) / 374 - 32)/1.8);
 	target_temperature = (dataRX[FAN_SPEED_POS] & SET_TEMP_MASK) + 16;
 
-	//ESP_LOGD("TCL", "TEMP: %f ", current_temperature);
+	ESP_LOGD("TCL", "Current temp: %.1f°C, Target: %.0f°C", current_temperature, target_temperature);
 
 	if (dataRX[MODE_POS] & ( 1 << 4)) {
 		// Если кондиционер включен, то разбираем данные для отображения
@@ -202,11 +186,23 @@ void tclacClimate::readData() {
 	}
 	// Публикуем данные
 	this->publish_state();
+	
+	// FIX: Set synchronization flag on first successful read
+	if (!first_sync_done_) {
+		first_sync_done_ = true;
+		ESP_LOGD("TCL", "First synchronization with AC completed!");
+	}
 	allow_take_control = true;
-   }
+}
 
 // Climate control
 void tclacClimate::control(const ClimateCall &call) {
+	// FIX: Don't accept commands until first synchronization
+	if (!first_sync_done_) {
+		ESP_LOGD("TCL", "Cannot control: waiting for first synchronization with AC");
+		return;
+	}
+	
 	// Запрашиваем данные из переключателя режимов работы кондиционера
 	if (call.get_mode().has_value()){
 		switch_climate_mode = call.get_mode().value();
@@ -234,7 +230,7 @@ void tclacClimate::control(const ClimateCall &call) {
 	if (call.get_swing_mode().has_value()){
 		switch_swing_mode = call.get_swing_mode().value();
 	} else {
-		// А если в переключателе пусто- заполняем значением из последнего опроса состояния. Типа, ничего не поменялось.
+		// А если в переключателе пусто- заполняем значением из последнего опроса состояния. Типа, ничего не помен
 		switch_swing_mode = swing_mode;
 	}
 	
@@ -253,14 +249,8 @@ void tclacClimate::control(const ClimateCall &call) {
 	
 void tclacClimate::takeControl() {
 	
-	dataTX[7]  = 0b00000000;
-	dataTX[8]  = 0b00000000;
-	dataTX[9]  = 0b00000000;
-	dataTX[10] = 0b00000000;
-	dataTX[11] = 0b00000000;
-	dataTX[19] = 0b00000000;
-	dataTX[32] = 0b00000000;
-	dataTX[33] = 0b00000000;
+	// FIX: Initialize entire buffer to prevent uninitialized memory issues
+	memset(dataTX, 0, sizeof(dataTX));
 	
 	if (is_call_control != true){
 		ESP_LOGD("TCL", "Get MODE from AC for force config");
@@ -412,12 +402,12 @@ void tclacClimate::takeControl() {
 		//		Качание горизонтальных заслонок [11 байт, маска 00001000]:
 		//			0 - Качание отключено, заслонки в последней позиции или в фиксации
 		//			1 - Качание включено в выбранном режиме
-		//		Режим качания горизонтальных заслонок (режим фиксации заслонок роли не играет, если качание включено) [33 байт, маска 00111000]:
+		//		Режим качания горизонтальных заслонок (режим фиксации заслонок роли не играет, если качание включено) [33 байт, маска 00011100]:
 		//			001 - качание слева направо, ПО УМОЛЧАНИЮ
 		//			010 - качание слева
 		//			011 - качание по середине
 		//			100 - качание справа
-		//		Режим фиксации горизонтальных заслонок (режим качания заслонок роли не играет, если качание выключено) [33 байт, маска 00000111]:
+		//		Режим фиксации горизонтальных заслонок (режим качания заслонок роли не играет, если качание выключено)[33 байт, маска 00000111]:
 		//			000 - нет фиксации, ПО УМОЛЧАНИЮ
 		//			001 - фиксация слева
 		//			010 - фиксация между левой стороной и серединой
@@ -524,37 +514,37 @@ void tclacClimate::takeControl() {
 	dataTX[2] = 0x01;	//стартовый байт заголовка
 	dataTX[3] = 0x03;	//0x03 - управление, 0x04 - опрос
 	dataTX[4] = 0x20;	//0x20 - управление, 0x19 - опрос
-	dataTX[5] = 0x03;	//??
-	dataTX[6] = 0x01;	//??
+	dataTX[5] = 0x03;	//?
+	dataTX[6] = 0x01;	//?
 	//dataTX[7] = 0x64;	//eco,display,beep,ontimerenable, offtimerenable,power,0,0
 	//dataTX[8] = 0x08;	//mute,0,turbo,health, mode(4) mode 01 heat, 02 dry, 03 cool, 07 fan, 08 auto, health(+16), 41=turbo-heat 43=turbo-cool (turbo = 0x40+ 0x01..0x08)
 	//dataTX[9] = 0x0f;	//0 -31 ;    15 - 16 0,0,0,0, temp(4) settemp 31 - x
 	//dataTX[10] = 0x00;	//0,timerindicator,swingv(3),fan(3) fan+swing modes //0=auto 1=low 2=med 3=high
 	//dataTX[11] = 0x00;	//0,offtimer(6),0
 	dataTX[12] = 0x00;	//fahrenheit,ontimer(6),0 cf 80=f 0=c
-	dataTX[13] = 0x01;	//??
+	dataTX[13] = 0x01;	//?
 	dataTX[14] = 0x00;	//0,0,halfdegree,0,0,0,0,0
-	dataTX[15] = 0x00;	//??
-	dataTX[16] = 0x00;	//??
-	dataTX[17] = 0x00;	//??
-	dataTX[18] = 0x00;	//??
+	dataTX[15] = 0x00;	//?
+	dataTX[16] = 0x00;	//?
+	dataTX[17] = 0x00;	//?
+	dataTX[18] = 0x00;	//?
 	//dataTX[19] = 0x00;	//sleep on = 1 off=0
-	dataTX[20] = 0x00;	//??
-	dataTX[21] = 0x00;	//??
-	dataTX[22] = 0x00;	//??
-	dataTX[23] = 0x00;	//??
-	dataTX[24] = 0x00;	//??
-	dataTX[25] = 0x00;	//??
-	dataTX[26] = 0x00;	//??
-	dataTX[27] = 0x00;	//??
-	dataTX[28] = 0x00;	//??
-	dataTX[30] = 0x00;	//??
-	dataTX[31] = 0x00;	//??
+	dataTX[20] = 0x00;	//?
+	dataTX[21] = 0x00;	//?
+	dataTX[22] = 0x00;	//?
+	dataTX[23] = 0x00;	//?
+	dataTX[24] = 0x00;	//?
+	dataTX[25] = 0x00;	//?
+	dataTX[26] = 0x00;	//?
+	dataTX[27] = 0x00;	//?
+	dataTX[28] = 0x00;	//?
+	dataTX[30] = 0x00;	//?
+	dataTX[31] = 0x00;	//?
 	//dataTX[32] = 0x00;	//0,0,0,режим вертикального качания(2),режим вертикальной фиксации(3)
 	//dataTX[33] = 0x00;	//0,0,режим горизонтального качания(3),режим горизонтальной фиксации(3)
-	dataTX[34] = 0x00;	//??
-	dataTX[35] = 0x00;	//??
-	dataTX[36] = 0x00;	//??
+	dataTX[34] = 0x00;	//?
+	dataTX[35] = 0x00;	//?
+	dataTX[36] = 0x00;	//?
 	dataTX[37] = 0xFF;	//Контрольная сумма
 	dataTX[37] = tclacClimate::getChecksum(dataTX, sizeof(dataTX));
 
@@ -565,12 +555,12 @@ void tclacClimate::takeControl() {
 
 // Отправка данных в кондиционер
 void tclacClimate::sendData(byte * message, byte size) {
-	tclacClimate::dataShow(1,1);
+	tclacClimate::dataShow(1, 1);
 	//Serial.write(message, size);
 	this->esphome::uart::UARTDevice::write_array(message, size);
 	//auto raw = getHex(message, size);
 	ESP_LOGD("TCL", "Message to TCL sended...");
-	tclacClimate::dataShow(1,0);
+	tclacClimate::dataShow(1, 0);
 }
 
 // Преобразование байта в читабельный формат
@@ -626,7 +616,8 @@ void tclacClimate::dataShow(bool flow, bool shine) {
 void tclacClimate::set_beeper_state(bool state) {
 	this->beeper_status_ = state;
 	if (force_mode_status_){
-		if (allow_take_control){
+		// FIX: Check first synchronization flag
+		if (allow_take_control && first_sync_done_){
 			tclacClimate::takeControl();
 		}
 	}
@@ -635,7 +626,8 @@ void tclacClimate::set_beeper_state(bool state) {
 void tclacClimate::set_display_state(bool state) {
 	this->display_status_ = state;
 	if (force_mode_status_){
-		if (allow_take_control){
+		// FIX: Check first synchronization flag
+		if (allow_take_control && first_sync_done_){
 			tclacClimate::takeControl();
 		}
 	}
@@ -664,7 +656,8 @@ void tclacClimate::set_module_display_state(bool state) {
 void tclacClimate::set_vertical_airflow(AirflowVerticalDirection direction) {
 	this->vertical_direction_ = direction;
 	if (force_mode_status_){
-		if (allow_take_control){
+		// FIX: Check first synchronization flag
+		if (allow_take_control && first_sync_done_){
 			tclacClimate::takeControl();
 		}
 	}
@@ -673,7 +666,8 @@ void tclacClimate::set_vertical_airflow(AirflowVerticalDirection direction) {
 void tclacClimate::set_horizontal_airflow(AirflowHorizontalDirection direction) {
 	this->horizontal_direction_ = direction;
 	if (force_mode_status_){
-		if (allow_take_control){
+		// FIX: Check first synchronization flag
+		if (allow_take_control && first_sync_done_){
 			tclacClimate::takeControl();
 		}
 	}
@@ -682,7 +676,8 @@ void tclacClimate::set_horizontal_airflow(AirflowHorizontalDirection direction) 
 void tclacClimate::set_vertical_swing_direction(VerticalSwingDirection direction) {
 	this->vertical_swing_direction_ = direction;
 	if (force_mode_status_){
-		if (allow_take_control){
+		// FIX: Check first synchronization flag
+		if (allow_take_control && first_sync_done_){
 			tclacClimate::takeControl();
 		}
 	}
@@ -695,7 +690,8 @@ void tclacClimate::set_supported_modes(climate::ClimateModeMask modes) {
 void tclacClimate::set_horizontal_swing_direction(HorizontalSwingDirection direction) {
 	horizontal_swing_direction_ = direction;
 	if (force_mode_status_){
-		if (allow_take_control){
+		// FIX: Check first synchronization flag
+		if (allow_take_control && first_sync_done_){
 			tclacClimate::takeControl();
 		}
 	}
