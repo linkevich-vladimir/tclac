@@ -52,6 +52,7 @@ void tclacClimate::setup() {
         allow_take_control = false;
         is_call_control = false;
         last_control_time_ = 0;
+        setup_time_ = millis();
 }
 
 void tclacClimate::loop()  {
@@ -59,6 +60,13 @@ void tclacClimate::loop()  {
 
         if (uart == nullptr) {
                 return;
+        }
+
+        // Таймаут инициализации - если кондиционер не отвечает, разрешаем управление
+        if (!initialized_ && (millis() - setup_time_ > INIT_TIMEOUT_MS)) {
+                ESP_LOGW("TCL", "AC initialization timeout - enabling control anyway");
+                initialized_ = true;
+                allow_take_control = true;
         }
 
         while (this->available() > 0) {
@@ -153,7 +161,8 @@ void tclacClimate::readData() {
         if (dataRX[MODE_POS] & (1 << 4)) {
                 uint8_t modeswitch = MODE_MASK & dataRX[MODE_POS];
                 uint8_t fanspeedswitch = FAN_SPEED_MASK & dataRX[FAN_SPEED_POS];
-                uint8_t swingmodeswitch = SWING_MODE_MASK & dataRX[SWING_POS];
+                uint8_t swing_vertical = SWING_VERTICAL_MASK & dataRX[SWING_POS];
+                uint8_t swing_horizontal = SWING_HORIZONTAL_MASK & dataRX[11];
 
                 switch (modeswitch) {
                         case MODE_AUTO:
@@ -204,22 +213,14 @@ void tclacClimate::readData() {
                         }
                 }
 
-                switch (swingmodeswitch) {
-                        case SWING_OFF:
-                                swing_mode = climate::CLIMATE_SWING_OFF;
-                                break;
-                        case SWING_HORIZONTAL:
-                                swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
-                                break;
-                        case SWING_VERTICAL:
-                                swing_mode = climate::CLIMATE_SWING_VERTICAL;
-                                break;
-                        case SWING_BOTH:
-                                swing_mode = climate::CLIMATE_SWING_BOTH;
-                                break;
-                        default:
-                                swing_mode = climate::CLIMATE_SWING_OFF;
-                                break;
+                if (swing_vertical == SWING_VERTICAL && swing_horizontal == SWING_HORIZONTAL) {
+                        swing_mode = climate::CLIMATE_SWING_BOTH;
+                } else if (swing_vertical == SWING_VERTICAL) {
+                        swing_mode = climate::CLIMATE_SWING_VERTICAL;
+                } else if (swing_horizontal == SWING_HORIZONTAL) {
+                        swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
+                } else {
+                        swing_mode = climate::CLIMATE_SWING_OFF;
                 }
 
                 preset = climate::CLIMATE_PRESET_NONE;
@@ -249,7 +250,8 @@ void tclacClimate::readData() {
 // Climate control
 void tclacClimate::control(const climate::ClimateCall &call) {
         if (!initialized_) {
-                ESP_LOGW("TCL", "Ignoring control command - AC not initialized yet");
+                ESP_LOGW("TCL", "AC not initialized yet - sending poll to request state");
+                this->esphome::uart::UARTDevice::write_array(poll, sizeof(poll));
                 return;
         }
 
