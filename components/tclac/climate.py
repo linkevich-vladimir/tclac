@@ -240,7 +240,7 @@ async def force_mode_action_to_code(config, action_id, template_arg, args):
             cv.Required(CONF_VERTICAL_AIRFLOW): cv.templatable(cv.enum(AIRFLOW_VERTICAL_DIRECTION_OPTIONS, upper=True)),
         }
     ),
-    synchronous=True,
+    synchronous=True
 )
 async def tclac_set_vertical_airflow_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
@@ -262,7 +262,7 @@ async def tclac_set_vertical_airflow_to_code(config, action_id, template_arg, ar
             cv.Required(CONF_HORIZONTAL_AIRFLOW): cv.templatable(cv.enum(AIRFLOW_HORIZONTAL_DIRECTION_OPTIONS, upper=True)),
         }
     ),
-    synchronous=True,
+    synchronous=True
 )
 async def tclac_set_horizontal_airflow_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
@@ -282,7 +282,7 @@ async def tclac_set_horizontal_airflow_to_code(config, action_id, template_arg, 
             cv.Required(CONF_VERTICAL_SWING_MODE): cv.templatable(cv.enum(VERTICAL_SWING_DIRECTION_OPTIONS, upper=True)),
         }
     ),
-    synchronous=True,
+    synchronous=True
 )
 async def tclac_set_vertical_swing_direction_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
@@ -302,7 +302,7 @@ async def tclac_set_vertical_swing_direction_to_code(config, action_id, template
             cv.Required(CONF_HORIZONTAL_SWING_MODE): cv.templatable(cv.enum(HORIZONTAL_SWING_DIRECTION_OPTIONS, upper=True)),
         }
     ),
-    synchronous=True,
+    synchronous=True
 )
 async def tclac_set_horizontal_swing_direction_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
